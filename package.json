@@ -52,15 +52,6 @@
       "!native/**/*.cc",
       "!native/**/*.h"
     ],
-    "extraResources": [
-      {
-        "from": "native/overlay/bin/",
-        "to": "overlay/",
-        "filter": [
-          "*.dll"
-        ]
-      }
-    ],
     "publish": null,
     "protocols": [
       {
