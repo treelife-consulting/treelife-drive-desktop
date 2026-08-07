@@ -3,7 +3,11 @@ name: Build & Deploy Windows Installer
 on:
   push:
     branches: [main]
+    tags: ['v*']
   workflow_dispatch:
+
+permissions:
+  contents: write   # needed to create releases
 
 jobs:
   build:
@@ -27,47 +31,100 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Upload artifact (90-day retention)
+      - name: Find installer and compute checksum
+        id: info
+        shell: pwsh
+        run: |
+          $exe = (Get-ChildItem dist\*.exe | Select-Object -First 1)
+          if (-not $exe) { Write-Error "No .exe found"; exit 1 }
+          $hash = (Get-FileHash $exe.FullName -Algorithm SHA256).Hash.ToLower()
+          $size = [math]::Round($exe.Length / 1MB, 1)
+          echo "exe=$($exe.FullName)" >> $env:GITHUB_OUTPUT
+          echo "name=$($exe.Name)" >> $env:GITHUB_OUTPUT
+          echo "sha256=$hash" >> $env:GITHUB_OUTPUT
+          echo "size=${size}MB" >> $env:GITHUB_OUTPUT
+          Write-Host "Built: $($exe.Name) ($size MB)"
+          Write-Host "SHA256: $hash"
+
+      - name: Write checksum file
+        shell: pwsh
+        run: |
+          $hash = "${{ steps.info.outputs.sha256 }}"
+          $name = "${{ steps.info.outputs.name }}"
+          "$hash  $name" | Out-File -FilePath dist\SHA256SUMS.txt -Encoding ascii
+          Get-Content dist\SHA256SUMS.txt
+
+      - name: Upload build artifact (90-day backup)
         uses: actions/upload-artifact@v4
         with:
           name: TrelifeDriveSetup
-          path: dist/*.exe
+          path: |
+            dist/*.exe
+            dist/SHA256SUMS.txt
           retention-days: 90
 
-      - name: Deploy to server
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ github.run_number }}
+          name: "Treelife Drive — Build ${{ github.run_number }}"
+          body: |
+            **Treelife Drive Windows installer**
+
+            Download `${{ steps.info.outputs.name }}` and verify integrity:
+
+            ```
+            SHA256: ${{ steps.info.outputs.sha256 }}
+            Size:   ${{ steps.info.outputs.size }}
+            ```
+
+            To verify in PowerShell:
+            ```powershell
+            Get-FileHash TrelifeDriveSetup.exe -Algorithm SHA256
+            ```
+
+            **Install:** Run the installer, enter your Treelife email and click "Open in Desktop App" from drive.treelife.co to connect automatically.
+          files: |
+            dist/*.exe
+            dist/SHA256SUMS.txt
+          draft: false
+          prerelease: false
+          make_latest: true
+
+      - name: Deploy exe to server + write checksum
         if: success()
         shell: pwsh
         env:
           DEPLOY_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          EXE_NAME: ${{ steps.info.outputs.name }}
+          EXE_SHA256: ${{ steps.info.outputs.sha256 }}
+          EXE_SIZE: ${{ steps.info.outputs.size }}
         run: |
-          # Write SSH key
           $keyFile = "$env:RUNNER_TEMP\deploy_key"
           [System.IO.File]::WriteAllText($keyFile, $env:DEPLOY_KEY)
           icacls $keyFile /inheritance:r /grant:r "${env:USERNAME}:F" | Out-Null
 
-          # Find built exe
           $exe = (Get-ChildItem dist\*.exe | Select-Object -First 1).FullName
-          if (-not $exe) { Write-Error "No .exe found in dist/"; exit 1 }
-          $name = [System.IO.Path]::GetFileName($exe)
-          Write-Host "Deploying: $name"
+          $remote = "$($env:DEPLOY_USER)@$($env:DEPLOY_HOST)"
 
-          # Ensure target directory exists
-          ssh -o StrictHostKeyChecking=no -i $keyFile `
-            "${env:DEPLOY_USER}@${env:DEPLOY_HOST}" `
-            "mkdir -p /opt/treelife-drive/public/installers"
+          # Ensure target dir
+          ssh -o StrictHostKeyChecking=no -i $keyFile $remote "mkdir -p /opt/treelife-drive/public/installers"
 
-          # SCP the installer
-          scp -o StrictHostKeyChecking=no -i $keyFile `
-            $exe `
-            "${env:DEPLOY_USER}@${env:DEPLOY_HOST}:/opt/treelife-drive/public/installers/$name"
+          # Upload installer + checksum
+          scp -o StrictHostKeyChecking=no -i $keyFile $exe "$remote:/opt/treelife-drive/public/installers/$($env:EXE_NAME)"
+          scp -o StrictHostKeyChecking=no -i $keyFile dist\SHA256SUMS.txt "$remote:/opt/treelife-drive/public/installers/SHA256SUMS.txt"
 
-          # Activate as the live installer
-          ssh -o StrictHostKeyChecking=no -i $keyFile `
-            "${env:DEPLOY_USER}@${env:DEPLOY_HOST}" `
-            "cp /opt/treelife-drive/public/installers/$name /opt/treelife-drive/public/TrelifeDriveSetup.exe && rm -f /opt/treelife-drive/public/TrelifeDriveSetup.exe.placeholder && ls -lh /opt/treelife-drive/public/TrelifeDriveSetup.exe"
+          # Activate + write metadata JSON for web UI
+          $meta = '{"name":"' + $env:EXE_NAME + '","sha256":"' + $env:EXE_SHA256 + '","size":"' + $env:EXE_SIZE + '","build":' + $env:GITHUB_RUN_NUMBER + '}'
+          ssh -o StrictHostKeyChecking=no -i $keyFile $remote @"
+            set -e
+            cp /opt/treelife-drive/public/installers/$($env:EXE_NAME) /opt/treelife-drive/public/TrelifeDriveSetup.exe
+            echo '$meta' > /opt/treelife-drive/public/installer-meta.json
+            rm -f /opt/treelife-drive/public/TrelifeDriveSetup.exe.placeholder
+            ls -lh /opt/treelife-drive/public/TrelifeDriveSetup.exe
+"@
 
-          # Cleanup key
           Remove-Item $keyFile -ErrorAction SilentlyContinue
-          Write-Host "Deploy complete"
+          Write-Host "Deployed successfully"

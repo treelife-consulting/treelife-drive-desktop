@@ -1,5 +1,8 @@
 'use strict';
 
+const ALLOWED_EXTERNAL = /^https:\/\/(drive\.treelife\.co)(\/|$)/;
+
+
 const {
   app,
   BrowserWindow,
@@ -127,7 +130,7 @@ function buildTrayMenu() {
     {
       label: 'Open Treelife Drive',
       click() {
-        shell.openExternal('https://drive.treelife.co');
+        ALLOWED_EXTERNAL.test('https://drive.treelife.co') && shell.openExternal('https://drive.treelife.co');
       },
     },
     {
@@ -199,7 +202,26 @@ function openRendererWindow() {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
+      sandbox: true,
+      webSecurity: true,
+      allowRunningInsecureContent: false,
     },
+  });
+
+  // Block navigation away from local file
+  rendererWindow.webContents.on('will-navigate', (e, url) => {
+    if (!url.startsWith('file://')) e.preventDefault();
+  });
+  // Block all new-window requests
+  rendererWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  // Inject CSP
+  rendererWindow.webContents.session.webRequest.onHeadersReceived((details, cb) => {
+    cb({ responseHeaders: {
+      ...details.responseHeaders,
+      'Content-Security-Policy': [
+        "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src https://drive.treelife.co; img-src 'self' data:; frame-src 'none'; object-src 'none'"
+      ],
+    }});
   });
 
   rendererWindow.setMenuBarVisibility(false);
@@ -409,7 +431,7 @@ function registerIpcHandlers() {
   });
 
   ipcMain.handle('open-drive', async () => {
-    await shell.openExternal('https://drive.treelife.co');
+    await ALLOWED_EXTERNAL.test('https://drive.treelife.co') && shell.openExternal('https://drive.treelife.co');
     return { ok: true };
   });
 
@@ -439,13 +461,17 @@ app.on("second-instance", (_event, argv) => {
 
 function handleDeepLink(url) {
   try {
+    if (!url.startsWith('treelife://connect?')) return;
     const u = new URL(url);
-    if (u.hostname === "connect") {
-      const email = u.searchParams.get("email");
-      const token = u.searchParams.get("token");
-      if (email && token) signIn(email, token).catch(e => console.error("Deep link:", e.message));
-    }
-  } catch (e) { console.error("Invalid deep link:", url, e.message); }
+    if (u.protocol !== 'treelife:' || u.hostname !== 'connect') return;
+    const email = u.searchParams.get('email') || '';
+    const token = u.searchParams.get('token') || '';
+    if (!email.endsWith('@treelife.in')) return;
+    if (!token || token.length < 10 || token.length > 512) return;
+    const keys = [...u.searchParams.keys()];
+    if (keys.some(k => k !== 'email' && k !== 'token')) return;
+    signIn(email, token).catch(e => console.error('Deep link sign-in:', e.message));
+  } catch (e) { console.error('Deep link rejected:', e.message); }
 }
 
 app.on('window-all-closed', () => {
@@ -476,7 +502,7 @@ app.whenReady().then(async () => {
   tray.setContextMenu(buildTrayMenu());
 
   tray.on('double-click', () => {
-    shell.openExternal('https://drive.treelife.co');
+    ALLOWED_EXTERNAL.test('https://drive.treelife.co') && shell.openExternal('https://drive.treelife.co');
   });
 
   // Check for stored credentials.
