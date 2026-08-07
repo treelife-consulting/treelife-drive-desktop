@@ -80,12 +80,14 @@ function ensureSyncFolder() {
 function loadTrayIcon() {
   try {
     if (fs.existsSync(ICON_PATH)) {
-      return nativeImage.createFromPath(ICON_PATH);
+      const img = nativeImage.createFromPath(ICON_PATH);
+      if (!img.isEmpty()) return img;
     }
-  } catch (_) {
-    // fall through
-  }
-  return nativeImage.createEmpty();
+  } catch (_) {}
+  // Fallback: 1x1 green pixel — Tray() crashes if given an empty NativeImage
+  return nativeImage.createFromDataURL(
+    'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVQI12NgAAIABQAABjE+ibYAAAAASUVORK5CYII='
+  );
 }
 
 // ─── Keytar (optional native module) ─────────────────────────────────────────
