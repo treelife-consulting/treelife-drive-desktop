@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Treelife Drive</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: #f7f6f2;
+    color: #1c2b3a;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    font-size: 14px;
+    line-height: 1.5;
+  }
+
+  .header {
+    background: #0d3b26;
+    color: #f7f6f2;
+    padding: 16px 20px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-shrink: 0;
+  }
+  .logo-icon {
+    width: 32px;
+    height: 32px;
+    background: #2e8b57;
+    border-radius: 7px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+  .logo-icon svg { display: block; }
+  .header-text { flex: 1; }
+  .header-title { font-size: 15px; font-weight: 700; letter-spacing: 0.01em; }
+  .header-version { font-size: 11px; color: #c8f04d; margin-top: 1px; font-weight: 500; }
+
+  .main { flex: 1; overflow-y: auto; padding: 24px 20px; }
+
+  .panel-heading { font-size: 16px; font-weight: 700; color: #0d3b26; margin-bottom: 6px; }
+  .panel-sub { font-size: 13px; color: #3d5166; margin-bottom: 20px; }
+
+  .steps { background: #e8eef4; border-radius: 8px; padding: 14px 16px; margin-bottom: 20px; }
+  .steps ol { padding-left: 18px; }
+  .steps li { font-size: 13px; color: #1c2b3a; padding: 3px 0; }
+  .steps li a { color: #2e8b57; font-weight: 600; text-decoration: none; }
+
+  .field-group { margin-bottom: 14px; }
+  .field-label {
+    display: block;
+    font-size: 12px;
+    font-weight: 600;
+    color: #3d5166;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 5px;
+  }
+  .field-input {
+    width: 100%;
+    padding: 9px 12px;
+    border: 1.5px solid #c8d4de;
+    border-radius: 6px;
+    font-size: 14px;
+    color: #1c2b3a;
+    background: #fff;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  .field-input:focus { border-color: #2e8b57; }
+  .field-input::placeholder { color: #8fa3b3; }
+
+  .btn {
+    width: 100%;
+    padding: 10px 16px;
+    border: none;
+    border-radius: 7px;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: opacity 0.15s, transform 0.1s;
+  }
+  .btn:active { transform: scale(0.98); }
+  .btn:disabled { opacity: 0.55; cursor: not-allowed; }
+
+  .btn-primary { background: #2e8b57; color: #fff; margin-top: 4px; }
+  .btn-primary:hover:not(:disabled) { background: #1a5c3a; }
+
+  .btn-secondary { background: #e8eef4; color: #1c2b3a; border: 1.5px solid #c8d4de; }
+  .btn-secondary:hover:not(:disabled) { background: #d4dde6; }
+
+  .btn-danger { background: #fff; color: #C0392B; border: 1.5px solid #e8b4b0; }
+  .btn-danger:hover:not(:disabled) { background: #fdf0ef; }
+
+  .message { padding: 9px 12px; border-radius: 6px; font-size: 13px; margin-bottom: 14px; display: none; }
+  .message.show { display: block; }
+  .message.success { background: #d6f0e0; color: #0d3b26; border: 1px solid #a8dbb8; }
+  .message.error   { background: #fdecea; color: #7b1c14; border: 1px solid #f0b8b4; }
+
+  .user-card {
+    background: #e8eef4;
+    border-radius: 8px;
+    padding: 14px 16px;
+    margin-bottom: 18px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .user-avatar {
+    width: 36px; height: 36px;
+    background: #2e8b57;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    color: #fff; font-weight: 700; font-size: 15px;
+    flex-shrink: 0;
+  }
+  .user-email { font-size: 13px; font-weight: 600; color: #1c2b3a; word-break: break-all; }
+  .user-label { font-size: 11px; color: #3d5166; margin-top: 1px; }
+
+  .status-row {
+    display: flex; align-items: center; gap: 10px;
+    margin-bottom: 18px; padding: 10px 14px;
+    background: #fff; border-radius: 8px; border: 1.5px solid #e8eef4;
+  }
+  .status-dot {
+    width: 10px; height: 10px;
+    border-radius: 50%; flex-shrink: 0;
+    transition: background 0.3s;
+  }
+  .status-dot.idle    { background: #27AE60; }
+  .status-dot.syncing { background: #5b8db8; animation: pulse 1.2s infinite; }
+  .status-dot.paused  { background: #E67E22; }
+  .status-dot.offline { background: #8fa3b3; }
+  .status-dot.error   { background: #C0392B; }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: 0.4; }
+  }
+
+  .status-label { font-size: 13px; font-weight: 600; color: #1c2b3a; flex: 1; }
+  .status-detail { font-size: 11px; color: #3d5166; }
+
+  .action-stack { display: flex; flex-direction: column; gap: 10px; }
+
+  .divider { border: none; border-top: 1px solid #d4dde6; margin: 18px 0; }
+
+  .footer {
+    padding: 12px 20px;
+    background: #e8eef4;
+    border-top: 1px solid #d4dde6;
+    flex-shrink: 0;
+  }
+  .footer-note { font-size: 11px; color: #3d5166; text-align: center; }
+
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="logo-icon">
+    <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+      <path d="M9 2L15 6V12L9 16L3 12V6L9 2Z" fill="#c8f04d" opacity="0.9"/>
+      <path d="M9 5L13 7.5V12.5L9 15L5 12.5V7.5L9 5Z" fill="#0d3b26"/>
+    </svg>
+  </div>
+  <div class="header-text">
+    <div class="header-title">Treelife Drive</div>
+    <div class="header-version">v1.0.0</div>
+  </div>
+</div>
+
+<div class="main">
+
+  <div id="panel-auth">
+    <div class="panel-heading">Connect your Treelife account</div>
+    <div class="panel-sub">Link this computer to your Treelife Drive in four steps.</div>
+
+    <div class="steps">
+      <ol>
+        <li>Go to <a href="#" id="link-drive">drive.treelife.co</a></li>
+        <li>Sign in with your account</li>
+        <li>Click <strong>Connect to Desktop</strong></li>
+        <li>Generate a token and paste it below</li>
+      </ol>
+    </div>
+
+    <div id="auth-message" class="message"></div>
+
+    <div class="field-group">
+      <label class="field-label" for="input-email">Email address</label>
+      <input id="input-email" class="field-input" type="email" placeholder="you@example.com" autocomplete="email">
+    </div>
+    <div class="field-group">
+      <label class="field-label" for="input-token">Desktop token</label>
+      <input id="input-token" class="field-input" type="password" placeholder="Paste token from drive.treelife.co">
+    </div>
+    <button id="btn-connect" class="btn btn-primary">Connect</button>
+  </div>
+
+  <div id="panel-main" class="hidden">
+
+    <div class="user-card">
+      <div id="user-avatar" class="user-avatar">T</div>
+      <div>
+        <div id="user-email-display" class="user-email">...</div>
+        <div class="user-label">Treelife Drive account</div>
+      </div>
+    </div>
+
+    <div class="status-row">
+      <div id="status-dot" class="status-dot idle"></div>
+      <span id="status-label" class="status-label">Idle</span>
+      <span id="status-detail" class="status-detail"></span>
+    </div>
+
+    <div id="main-message" class="message"></div>
+
+    <div class="action-stack">
+      <button id="btn-open-folder" class="btn btn-secondary">Open Sync Folder</button>
+      <button id="btn-pause-resume" class="btn btn-secondary">Pause Sync</button>
+    </div>
+
+    <hr class="divider">
+
+    <button id="btn-sign-out" class="btn btn-danger">Sign Out</button>
+  </div>
+
+</div>
+
+<div class="footer">
+  <div class="footer-note">Files sync to ~/Treelife Drive on your computer</div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  var panelAuth      = document.getElementById('panel-auth');
+  var panelMain      = document.getElementById('panel-main');
+  var authMsg        = document.getElementById('auth-message');
+  var mainMsg        = document.getElementById('main-message');
+  var inputEmail     = document.getElementById('input-email');
+  var inputToken     = document.getElementById('input-token');
+  var btnConnect     = document.getElementById('btn-connect');
+  var userAvatar     = document.getElementById('user-avatar');
+  var userEmailEl    = document.getElementById('user-email-display');
+  var statusDot      = document.getElementById('status-dot');
+  var statusLabel    = document.getElementById('status-label');
+  var statusDetail   = document.getElementById('status-detail');
+  var btnOpenFolder  = document.getElementById('btn-open-folder');
+  var btnPauseResume = document.getElementById('btn-pause-resume');
+  var btnSignOut     = document.getElementById('btn-sign-out');
+  var linkDrive      = document.getElementById('link-drive');
+
+  var isPaused     = false;
+  var refreshTimer = null;
+
+  function showMsg(el, type, text) {
+    el.textContent = text;
+    el.className = 'message show ' + type;
+  }
+
+  function hideMsg(el) {
+    el.className = 'message';
+    el.textContent = '';
+  }
+
+  function setStatusBadge(status) {
+    var states = {
+      idle:    { label: 'Idle',    cls: 'idle',    detail: 'Everything up to date' },
+      syncing: { label: 'Syncing', cls: 'syncing', detail: 'Transferring files...' },
+      paused:  { label: 'Paused',  cls: 'paused',  detail: 'Sync is paused' },
+      offline: { label: 'Offline', cls: 'offline', detail: 'No network connection' },
+      error:   { label: 'Error',   cls: 'error',   detail: 'Check connection or sign in again' }
+    };
+    var s = states[status] || states['offline'];
+    statusDot.className = 'status-dot ' + s.cls;
+    statusLabel.textContent = s.label;
+    statusDetail.textContent = s.detail;
+    isPaused = (status === 'paused');
+    btnPauseResume.textContent = isPaused ? 'Resume Sync' : 'Pause Sync';
+  }
+
+  function showSignedIn(email, status) {
+    panelAuth.classList.add('hidden');
+    panelMain.classList.remove('hidden');
+    userEmailEl.textContent = email || '';
+    userAvatar.textContent = (email || 'T').charAt(0).toUpperCase();
+    setStatusBadge(status || 'idle');
+  }
+
+  function showSignedOut() {
+    panelMain.classList.add('hidden');
+    panelAuth.classList.remove('hidden');
+    hideMsg(mainMsg);
+    stopRefresh();
+  }
+
+  function doRefresh() {
+    if (!window.treelife) return;
+    window.treelife.getStatus().then(function (data) {
+      if (!data) return;
+      if (data.signedIn === false) { showSignedOut(); return; }
+      showSignedIn(data.email, data.syncStatus);
+    }).catch(function () {});
+  }
+
+  function startRefresh() {
+    doRefresh();
+    refreshTimer = setInterval(doRefresh, 3000);
+  }
+
+  function stopRefresh() {
+    if (refreshTimer) { clearInterval(refreshTimer); refreshTimer = null; }
+  }
+
+  if (window.treelife) {
+    window.treelife.onStatusUpdate(function (data) {
+      if (!data) return;
+      if (data.signedIn === false) { showSignedOut(); return; }
+      showSignedIn(data.email, data.syncStatus);
+    });
+  }
+
+  if (linkDrive) {
+    linkDrive.addEventListener('click', function (e) {
+      e.preventDefault();
+      if (window.treelife && window.treelife.openDrive) {
+        window.treelife.openDrive();
+      } else {
+        window.open('https://drive.treelife.co', '_blank');
+      }
+    });
+  }
+
+  btnConnect.addEventListener('click', function () {
+    var email = inputEmail.value.trim();
+    var token = inputToken.value.trim();
+    hideMsg(authMsg);
+
+    if (!email || !token) {
+      showMsg(authMsg, 'error', 'Please enter both your email and the token.');
+      return;
+    }
+    if (!/^[^@]+@[^@]+\.[^@]+$/.test(email)) {
+      showMsg(authMsg, 'error', 'Enter a valid email address.');
+      return;
+    }
+
+    btnConnect.disabled = true;
+    btnConnect.textContent = 'Connecting...';
+
+    if (!window.treelife) {
+      showMsg(authMsg, 'error', 'IPC bridge not available. Restart the app.');
+      btnConnect.disabled = false;
+      btnConnect.textContent = 'Connect';
+      return;
+    }
+
+    window.treelife.signIn(email, token).then(function (result) {
+      if (result && result.success) {
+        showMsg(authMsg, 'success', 'Connected successfully.');
+        inputEmail.value = '';
+        inputToken.value = '';
+        showSignedIn(email, result.syncStatus || 'idle');
+        startRefresh();
+      } else {
+        var msg = (result && result.error) ? result.error : 'Connection failed. Check your token and try again.';
+        showMsg(authMsg, 'error', msg);
+        btnConnect.disabled = false;
+        btnConnect.textContent = 'Connect';
+      }
+    }).catch(function () {
+      showMsg(authMsg, 'error', 'Connection error. Please try again.');
+      btnConnect.disabled = false;
+      btnConnect.textContent = 'Connect';
+    });
+  });
+
+  [inputEmail, inputToken].forEach(function (el) {
+    el.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') btnConnect.click();
+    });
+  });
+
+  btnOpenFolder.addEventListener('click', function () {
+    if (!window.treelife) return;
+    btnOpenFolder.disabled = true;
+    window.treelife.openSyncFolder().then(function () {
+      btnOpenFolder.disabled = false;
+    }).catch(function () {
+      btnOpenFolder.disabled = false;
+    });
+  });
+
+  btnPauseResume.addEventListener('click', function () {
+    if (!window.treelife) return;
+    btnPauseResume.disabled = true;
+    var action = isPaused ? window.treelife.resumeSync() : window.treelife.pauseSync();
+    action.then(function (result) {
+      btnPauseResume.disabled = false;
+      if (result && result.syncStatus) setStatusBadge(result.syncStatus);
+    }).catch(function () {
+      btnPauseResume.disabled = false;
+    });
+  });
+
+  btnSignOut.addEventListener('click', function () {
+    if (!window.treelife) return;
+    hideMsg(mainMsg);
+    btnSignOut.disabled = true;
+    btnSignOut.textContent = 'Signing out...';
+    window.treelife.signOut().then(function () {
+      showSignedOut();
+      btnSignOut.disabled = false;
+      btnSignOut.textContent = 'Sign Out';
+    }).catch(function () {
+      showMsg(mainMsg, 'error', 'Could not sign out. Try again.');
+      btnSignOut.disabled = false;
+      btnSignOut.textContent = 'Sign Out';
+    });
+  });
+
+  (function init() {
+    if (!window.treelife) { showSignedOut(); return; }
+    window.treelife.getStatus().then(function (data) {
+      if (data && data.signedIn) {
+        showSignedIn(data.email, data.syncStatus);
+        startRefresh();
+      } else {
+        showSignedOut();
+      }
+    }).catch(function () {
+      showSignedOut();
+    });
+  })();
+
+})();
+</script>
+
+</body>
+</html>
