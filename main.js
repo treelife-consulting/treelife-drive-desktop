@@ -462,6 +462,19 @@ app.on("second-instance", (_event, argv) => {
   }
 });
 
+async function signIn(email, token) {
+  const client = new ApiClient(token);
+  try {
+    await client.getUser();
+  } catch (err) {
+    throw new Error('Invalid token or unable to reach Treelife Drive: ' + err.message);
+  }
+  await storePAT(token);
+  store.set(STORE_EMAIL_KEY, email);
+  appState.user = email;
+  await initSync(token, email);
+}
+
 function handleDeepLink(url) {
   try {
     const u = new URL(url);
