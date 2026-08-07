@@ -8,7 +8,7 @@ on:
 jobs:
   build:
     runs-on: windows-latest
-    timeout-minutes: 30
+    timeout-minutes: 40
 
     steps:
       - name: Checkout
@@ -27,49 +27,47 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Find installer
-        id: find
-        shell: bash
-        run: |
-          exe=$(ls dist/*.exe 2>/dev/null | head -1)
-          echo "path=$exe" >> $GITHUB_OUTPUT
-          echo "name=$(basename $exe)" >> $GITHUB_OUTPUT
-
-      - name: Upload artifact
+      - name: Upload artifact (90-day retention)
         uses: actions/upload-artifact@v4
         with:
           name: TrelifeDriveSetup
           path: dist/*.exe
           retention-days: 90
 
-      - name: Deploy to server via SCP
-        if: success() && steps.find.outputs.path != ''
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.DEPLOY_HOST }}
-          username: ${{ secrets.DEPLOY_USER }}
-          key: ${{ secrets.DEPLOY_SSH_KEY }}
-          source: "dist/*.exe"
-          target: "/opt/treelife-drive/public/installers/"
-          strip_components: 1
+      - name: Deploy to server
+        if: success()
+        shell: pwsh
+        env:
+          DEPLOY_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+        run: |
+          # Write SSH key
+          $keyFile = "$env:RUNNER_TEMP\deploy_key"
+          [System.IO.File]::WriteAllText($keyFile, $env:DEPLOY_KEY)
+          icacls $keyFile /inheritance:r /grant:r "${env:USERNAME}:F" | Out-Null
 
-      - name: Activate installer on server
-        if: success() && steps.find.outputs.path != ''
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.DEPLOY_HOST }}
-          username: ${{ secrets.DEPLOY_USER }}
-          key: ${{ secrets.DEPLOY_SSH_KEY }}
-          script: |
-            cd /opt/treelife-drive/public
-            mkdir -p installers
-            latest=$(ls -t installers/TrelifeDrive*.exe 2>/dev/null | head -1)
-            if [ -n "$latest" ]; then
-              cp "$latest" TrelifeDriveSetup.exe
-              rm -f TrelifeDriveSetup.exe.placeholder
-              echo "Deployed: $latest"
-              ls -lh TrelifeDriveSetup.exe
-            else
-              echo "ERROR: no installer found in installers/"
-              exit 1
-            fi
+          # Find built exe
+          $exe = (Get-ChildItem dist\*.exe | Select-Object -First 1).FullName
+          if (-not $exe) { Write-Error "No .exe found in dist/"; exit 1 }
+          $name = [System.IO.Path]::GetFileName($exe)
+          Write-Host "Deploying: $name"
+
+          # Ensure target directory exists
+          ssh -o StrictHostKeyChecking=no -i $keyFile `
+            "${env:DEPLOY_USER}@${env:DEPLOY_HOST}" `
+            "mkdir -p /opt/treelife-drive/public/installers"
+
+          # SCP the installer
+          scp -o StrictHostKeyChecking=no -i $keyFile `
+            $exe `
+            "${env:DEPLOY_USER}@${env:DEPLOY_HOST}:/opt/treelife-drive/public/installers/$name"
+
+          # Activate as the live installer
+          ssh -o StrictHostKeyChecking=no -i $keyFile `
+            "${env:DEPLOY_USER}@${env:DEPLOY_HOST}" `
+            "cp /opt/treelife-drive/public/installers/$name /opt/treelife-drive/public/TrelifeDriveSetup.exe && rm -f /opt/treelife-drive/public/TrelifeDriveSetup.exe.placeholder && ls -lh /opt/treelife-drive/public/TrelifeDriveSetup.exe"
+
+          # Cleanup key
+          Remove-Item $keyFile -ErrorAction SilentlyContinue
+          Write-Host "Deploy complete"
