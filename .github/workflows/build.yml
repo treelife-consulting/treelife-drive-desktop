@@ -1,0 +1,76 @@
+name: Build & Deploy Windows Installer
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build Windows installer
+        run: npm run build
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Find installer
+        id: find
+        shell: bash
+        run: |
+          exe=$(ls dist/*.exe 2>/dev/null | head -1)
+          echo "path=$exe" >> $GITHUB_OUTPUT
+          echo "name=$(basename $exe)" >> $GITHUB_OUTPUT
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: TrelifeDriveSetup
+          path: dist/*.exe
+          retention-days: 90
+
+      - name: Deploy to server via SCP
+        if: success() && steps.find.outputs.path != ''
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          source: "dist/*.exe"
+          target: "/opt/treelife-drive/public/installers/"
+          strip_components: 1
+
+      - name: Activate installer on server
+        if: success() && steps.find.outputs.path != ''
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          script: |
+            cd /opt/treelife-drive/public
+            mkdir -p installers
+            latest=$(ls -t installers/TrelifeDrive*.exe 2>/dev/null | head -1)
+            if [ -n "$latest" ]; then
+              cp "$latest" TrelifeDriveSetup.exe
+              rm -f TrelifeDriveSetup.exe.placeholder
+              echo "Deployed: $latest"
+              ls -lh TrelifeDriveSetup.exe
+            else
+              echo "ERROR: no installer found in installers/"
+              exit 1
+            fi

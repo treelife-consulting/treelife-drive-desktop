@@ -428,19 +428,35 @@ function registerIpcHandlers() {
 
 // ─── App lifecycle ────────────────────────────────────────────────────────────
 
-app.on('second-instance', () => {
-  // Another instance tried to launch; surface the renderer if open.
+app.on("second-instance", (_event, argv) => {
+  const url = argv.find(a => a.startsWith("treelife://"));
+  if (url) { handleDeepLink(url); return; }
   if (rendererWindow && !rendererWindow.isDestroyed()) {
     if (rendererWindow.isMinimized()) rendererWindow.restore();
     rendererWindow.focus();
   }
 });
 
+function handleDeepLink(url) {
+  try {
+    const u = new URL(url);
+    if (u.hostname === "connect") {
+      const email = u.searchParams.get("email");
+      const token = u.searchParams.get("token");
+      if (email && token) signIn(email, token).catch(e => console.error("Deep link:", e.message));
+    }
+  } catch (e) { console.error("Invalid deep link:", url, e.message); }
+}
+
 app.on('window-all-closed', () => {
   // Stay alive in tray; do NOT quit.
 });
 
 app.whenReady().then(async () => {
+  // Register treelife:// protocol for one-click connect from web UI
+  if (process.platform === win32) {
+    app.setAsDefaultProtocolClient(treelife);
+  }
   requireModules();
   notifications = new Notifications();
 

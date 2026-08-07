@@ -23,7 +23,14 @@
     "appId": "co.treelife.drive",
     "productName": "Treelife Drive",
     "win": {
-      "target": [{"target": "nsis", "arch": ["x64"]}],
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
       "icon": "assets/icon.ico",
       "artifactName": "TrelifeDriveSetup-${version}.exe"
     },
@@ -32,10 +39,36 @@
       "allowToChangeInstallationDirectory": false,
       "createDesktopShortcut": false,
       "createStartMenuShortcut": true,
-      "runAfterFinish": true
+      "runAfterFinish": true,
+      "perMachine": false,
+      "deleteAppDataOnUninstall": false,
+      "installerHeaderIcon": "assets/icon.ico"
     },
-    "files": ["main.js","src/**","renderer/**","assets/**","!native/**/*.cc","!native/**/*.h"],
-    "extraResources": [{"from": "native/overlay/bin/", "to": "overlay/", "filter": ["*.dll"]}],
-    "publish": null
+    "files": [
+      "main.js",
+      "src/**",
+      "renderer/**",
+      "assets/**",
+      "!native/**/*.cc",
+      "!native/**/*.h"
+    ],
+    "extraResources": [
+      {
+        "from": "native/overlay/bin/",
+        "to": "overlay/",
+        "filter": [
+          "*.dll"
+        ]
+      }
+    ],
+    "publish": null,
+    "protocols": [
+      {
+        "name": "Treelife Drive",
+        "schemes": [
+          "treelife"
+        ]
+      }
+    ]
   }
 }
