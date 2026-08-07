@@ -12,6 +12,7 @@ const {
   ipcMain,
   nativeImage,
   Notification,
+  dialog,
 } = require('electron');
 const path = require('path');
 const os = require('os');
@@ -461,17 +462,64 @@ app.on("second-instance", (_event, argv) => {
 
 function handleDeepLink(url) {
   try {
-    if (!url.startsWith('treelife://connect?')) return;
     const u = new URL(url);
-    if (u.protocol !== 'treelife:' || u.hostname !== 'connect') return;
-    const email = u.searchParams.get('email') || '';
-    const token = u.searchParams.get('token') || '';
-    if (!email.endsWith('@treelife.in')) return;
-    if (!token || token.length < 10 || token.length > 512) return;
-    const keys = [...u.searchParams.keys()];
-    if (keys.some(k => k !== 'email' && k !== 'token')) return;
-    signIn(email, token).catch(e => console.error('Deep link sign-in:', e.message));
+    if (u.protocol !== 'treelife:') return;
+
+    if (u.hostname === 'connect') {
+      const email = u.searchParams.get('email') || '';
+      const token = u.searchParams.get('token') || '';
+      if (!email.endsWith('@treelife.in')) return;
+      if (!token || token.length < 10 || token.length > 512) return;
+      const keys = [...u.searchParams.keys()];
+      if (keys.some(k => k !== 'email' && k !== 'token')) return;
+      signIn(email, token).catch(e => console.error('Deep link sign-in:', e.message));
+      return;
+    }
+
+    if (u.hostname === 'request-access') {
+      const dropboxPath = u.searchParams.get('path') || '';
+      if (!dropboxPath || dropboxPath.length > 1024) return;
+      handleRequestAccess(dropboxPath);
+      return;
+    }
   } catch (e) { console.error('Deep link rejected:', e.message); }
+}
+
+async function handleRequestAccess(dropboxPath) {
+  const folderName = dropboxPath.split('/').filter(Boolean).pop() || dropboxPath;
+  if (!apiClient) {
+    dialog.showMessageBox({
+      type: 'warning',
+      title: 'Not Connected',
+      message: 'Treelife Drive is not connected. Sign in first, then try again.',
+      buttons: ['OK'],
+    });
+    return;
+  }
+  const confirmed = await dialog.showMessageBox({
+    type: 'question',
+    title: 'Request Access',
+    message: 'Request access to "' + folderName + '"?',
+    detail: 'Your administrator will be notified and can grant you access from drive.treelife.co.',
+    buttons: ['Request Access', 'Cancel'],
+    defaultId: 0,
+    cancelId: 1,
+  });
+  if (confirmed.response !== 0) return;
+  try {
+    await apiClient.requestAccess(dropboxPath);
+    new Notification({
+      title: 'Access Requested',
+      body: 'Your request for "' + folderName + '" has been sent to your administrator.',
+    }).show();
+  } catch (err) {
+    dialog.showMessageBox({
+      type: 'error',
+      title: 'Request Failed',
+      message: 'Could not send access request: ' + (err.message || 'Unknown error'),
+      buttons: ['OK'],
+    });
+  }
 }
 
 app.on('window-all-closed', () => {
@@ -480,8 +528,8 @@ app.on('window-all-closed', () => {
 
 app.whenReady().then(async () => {
   // Register treelife:// protocol for one-click connect from web UI
-  if (process.platform === win32) {
-    app.setAsDefaultProtocolClient(treelife);
+  if (process.platform === "win32") {
+    app.setAsDefaultProtocolClient("treelife");
   }
   requireModules();
   notifications = new Notifications();
