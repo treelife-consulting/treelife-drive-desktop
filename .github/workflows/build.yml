@@ -107,9 +107,9 @@ jobs:
           [System.IO.File]::WriteAllText($metaFile, $meta)
 
           ssh -o StrictHostKeyChecking=no -i $keyFile $remote "mkdir -p /opt/treelife-drive/public/installers"
-          scp -o StrictHostKeyChecking=no -i $keyFile $exe "$remote:/opt/treelife-drive/public/installers/$($env:EXE_NAME)"
-          scp -o StrictHostKeyChecking=no -i $keyFile dist\SHA256SUMS.txt "$remote:/opt/treelife-drive/public/installers/SHA256SUMS.txt"
-          scp -o StrictHostKeyChecking=no -i $keyFile $metaFile "$remote:/opt/treelife-drive/public/installer-meta.json"
+          scp -o StrictHostKeyChecking=no -i $keyFile $exe "${remote}:/opt/treelife-drive/public/installers/$($env:EXE_NAME)"
+          scp -o StrictHostKeyChecking=no -i $keyFile dist\SHA256SUMS.txt "${remote}:/opt/treelife-drive/public/installers/SHA256SUMS.txt"
+          scp -o StrictHostKeyChecking=no -i $keyFile $metaFile "${remote}:/opt/treelife-drive/public/installer-meta.json"
           ssh -o StrictHostKeyChecking=no -i $keyFile $remote "cp /opt/treelife-drive/public/installers/$($env:EXE_NAME) /opt/treelife-drive/public/TrelifeDriveSetup.exe && ls -lh /opt/treelife-drive/public/TrelifeDriveSetup.exe"
 
           Remove-Item $keyFile -ErrorAction SilentlyContinue
