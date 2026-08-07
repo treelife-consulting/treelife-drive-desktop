@@ -46,12 +46,14 @@ jobs:
           Write-Host "Built: $($exe.Name) ($size MB)"
           Write-Host "SHA256: $hash"
 
-      - name: Write checksum file
+      - name: Rename and write checksum
         shell: pwsh
         run: |
+          $src = (Get-ChildItem dist\*.exe | Select-Object -First 1).FullName
+          $dst = Join-Path (Split-Path $src) "TrelifeDriveSetup.exe"
+          if ($src -ne $dst) { Rename-Item $src $dst }
           $hash = "${{ steps.info.outputs.sha256 }}"
-          $name = "${{ steps.info.outputs.name }}"
-          "$hash  $name" | Out-File -FilePath dist\SHA256SUMS.txt -Encoding ascii
+          "$hash  TrelifeDriveSetup.exe" | Out-File -FilePath dist\SHA256SUMS.txt -Encoding ascii
           Get-Content dist\SHA256SUMS.txt
 
       - name: Upload build artifact (90-day backup)
